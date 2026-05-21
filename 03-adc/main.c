@@ -4,11 +4,10 @@
 #include "pico/stdlib.h"
 #include "protocol-task/protocol-task.h"
 #include "led-task/led-task.h"
+#include "adc-task/adc-task.h"
 
 #define DEVICE_NAME "my-pico-device"
 #define DEVICE_VRSN "v0.0.1"
-
-void command_help_callback(const char* args);
 
 void version_callback(const char* args)
 {
@@ -34,29 +33,26 @@ void led_blink_callback(const char* args)
 	led_task_state_set(LED_STATE_BLINK);
 }
 
-void led_blink_set_period_ms_callback(const char* args)
+void get_adc_callback(const char* args)
 {
-	uint32_t period_ms = 0;
-	sscanf(args, "%u", &period_ms);
-	if (period_ms==0) {printf("Error: blinking period cannot be 0ms"); return;}
-	led_task_set_blink_period_ms(period_ms);
+	float voltage_V = voltage_measure();
+	printf("%f\n", voltage_V);
 }
 
-void command_mem_callback(const char* args)
+void get_temp_callback(const char* args)
 {
-	uint32_t address;
-	sscanf(args, "%x", &address);
-	uint32_t *ptr = (uint32_t*)address;
-	printf("0x%08X\n", *ptr);
-
+	float temp_C = temp_measure();
+	printf("%f\n", temp_C);
 }
 
-void command_wmem_callback(const char* args)
+void tm_start_callback(const char* args)
 {
-	uint32_t address, znach;
-	sscanf(args, "%x %x", &address, &znach);
-	uint32_t *ptr = (uint32_t*)address;
-	*ptr=znach;
+	adc_task_set_state(ADC_TASK_STATE_RUN);
+}
+
+void tm_stop_callback(const char* args)
+{
+	adc_task_set_state(ADC_TASK_STATE_IDLE);
 }
 
 api_t device_api[] =
@@ -65,24 +61,12 @@ api_t device_api[] =
 	{"on", led_on_callback, "make led to turn on"},
 	{"off", led_off_callback, "make led to turn off"},
 	{"blink", led_blink_callback, "make led blink"},
-	{"set_period", led_blink_set_period_ms_callback, "changing blinking period"},
-	{"command_help", command_help_callback, "print commands description"},
-	{"mem", command_mem_callback, "print smth located at that address"},
-	{"wmem", command_wmem_callback, "поменять значение в заданной ячейке на заданное"},
-	{NULL, NULL, NULL},
+	{"get_adc", get_adc_callback, "measure adc's voltage"},
+	{"get_temp", get_temp_callback, "measure temperature"},
+	{"tm_start", tm_start_callback, "start measuring V and T"},
+	{"tm_stop", tm_stop_callback, "stop measuring V and T"},
+	{NULL, NULL, NULL}
 };
-
-
-void command_help_callback(const char* args)
-{
-	int i = 0;
-	while (device_api[i].command_name != NULL)
-	{
-		printf("Команда %s: %s\n", device_api[i].command_name, device_api[i].command_help);
-		i++;
-	}
-}
-
 
 int main()
 {
@@ -90,11 +74,13 @@ int main()
 	stdio_init_all();
 	protocol_task_init(device_api);
 	led_task_init();
+	adc_task_init();
 
 	while(1)
 	{
 		char* command = stdio_task_handle();
 		led_task_handle();
 		protocol_task_handle(command);
+		adc_task_handle();
 	}
 }
